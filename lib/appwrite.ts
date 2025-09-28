@@ -10,6 +10,7 @@ export const client = new Client()
     
     export const DATABASE_ID = process.env.EXPO_PUBLIC_DATABASE_ID!
     export const HABITS_TABLE_ID = process.env.EXPO_PUBLIC_TABLE_ID!
+    export const COMPLETIONS_TABLE_ID = process.env.EXPO_PUBLIC_COMPLETIONS_ID!
 
     export interface RealTimeResponse {
         events: string[];

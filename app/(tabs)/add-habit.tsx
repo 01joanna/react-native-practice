@@ -41,7 +41,6 @@ export default function AddHabit() {
             });
 
             router.back();
-
         } catch (error) {
             if (error instanceof Error) {
                 setError(error.message)

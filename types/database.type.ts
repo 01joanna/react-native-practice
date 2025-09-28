@@ -1,4 +1,3 @@
-import { Models } from "react-native-appwrite";
 
 export interface Habit {
     $id: string;
@@ -17,8 +16,22 @@ export interface Habit {
     created_at: string;
 }
 
-export interface HabitCompletion extends Models.Row {
+export interface HabitCompletion {
+
+    $id: string;
+    $databaseId: string;
+    $tableId: string;
+    $createdAt: string;
+    $updatedAt: string;
+    $permissions: string[]; 
+    
     habit_id: string;
     user_id: string;
-    completed_at: string;
+    last_completed: string;
+}
+
+interface StreakData {
+    streak: number,
+    bestStreak: number,
+    total: number
 }
