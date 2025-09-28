@@ -1,98 +1,229 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { client, DATABASE_ID, databases, HABITS_TABLE_ID, RealTimeResponse } from "@/lib/appwrite";
+import { useAuth } from "@/lib/auth-context";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Query } from "react-native-appwrite";
+import { Button, Surface, Text } from "react-native-paper";
+import { Habit } from '../../types/database.type';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    const { signOut, user } = useAuth();
+    const [habits, setHabits] = useState<Habit[]>([])
+
+    useEffect(() => {
+        if (user) {
+            fetchHabits();
+
+            const channel = `databases.${DATABASE_ID}.collections.${HABITS_TABLE_ID}`
+
+            const habitsSubscription = client.subscribe(channel, (response: RealTimeResponse) => {
+                if (response.events.includes("databases.*.tables.*.documents.*.create")) {
+                    fetchHabits();
+                } else if (
+                    response.events.includes(
+                        "databases.*.tables.*.documents.*.update")
+                ) {
+                    fetchHabits();
+                } else if (
+                    response.events.includes(
+                        "databases.*.tables.*.documents.*.delete")
+                ) {
+                    fetchHabits();
+                }
+            }
+            )
+
+            fetchHabits();
+            return () => {
+                habitsSubscription();
+            }
+        }
+    }, [user])
+
+    const fetchHabits = async () => {
+        if (!user) return;
+
+        try {
+            const response = await databases.listRows({
+                databaseId: DATABASE_ID,
+                tableId: HABITS_TABLE_ID,
+                queries: [Query.equal("user_id", user.$id)],
+            });
+
+            const mappedHabits: Habit[] = response.rows.map(row => ({
+                $id: row.$id,
+                $databaseId: row.$databaseId,
+                $tableId: row.$tableId,
+                $createdAt: row.$createdAt,
+                $updatedAt: row.$updatedAt,
+                $permissions: row.$permissions,
+
+                user_id: row.user_id,
+                title: row.title,
+                description: row.description,
+                frequency: row.frequency,
+                streak_count: row.streak_count,
+                last_completed: row.last_completed,
+                created_at: row.created_at,
+            }));
+
+            setHabits(mappedHabits);
+
+        } catch (error) {
+            console.error("Error fetching habits:", error);
+        }
+    };
+
+
+    return (
+        <View style={styles.container}>
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <Text variant="headlineSmall" style={styles.title}>
+                        {" "}
+                        Today's Habits
+                    </Text>
+                    <Button mode="text" onPress={signOut} icon={"logout"}>
+                        Sign Out
+                    </Button>
+                </View>
+
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    {habits?.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyStateText}>No habits yet. Add your first habit!</Text>
+                        </View>
+                    ) : (
+                        habits.map((habit, key) => (
+                            <Surface style={styles.card} elevation={0} key={key}>
+                                <View key={key} style={styles.cardContent}>
+                                    <Text style={styles.title}> {habit.title}</Text>
+                                    <Text style={styles.cardDescription}> {habit.description}</Text>
+                                    <View style={styles.cardFooter}>
+                                        <View style={styles.streakBadge}>
+                                            <MaterialCommunityIcons name="fire" size={18} color={"#ff9800"} />
+                                            <Text style={styles.streakText}>{habit.streak_count} day streak</Text>
+                                        </View>
+                                        <View style={styles.frequencyBadge}>
+                                            <Text style={styles.frequencyText}>
+                                                {" "}
+                                                {habit.frequency.charAt(0).toUpperCase() +
+                                                    habit.frequency.slice(1)}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            </Surface>
+                        ))
+                    )}
+                </ScrollView>
+            </View>
+        </View>
+    )
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: {
+        flex: 1,
+        padding: 16,
+        backgroundColor: "#f5f5f5",
+    },
+    header: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 24,
+    },
+    title: {
+        fontWeight: "bold",
+    },
+
+    card: {
+        marginBottom: 18,
+        borderRadius: 18,
+        backgroundColor: "#f7f2fa",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+
+    cardCompleted: {
+        opacity: 0.6,
+    },
+    cardContent: {
+        padding: 20,
+    },
+    cardTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        marginBottom: 4,
+        color: "#22223b",
+    },
+    cardDescription: {
+        fontSize: 15,
+        marginBottom: 16,
+        color: "#6c6c80",
+    },
+    cardFooter: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    streakBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#fff3e0",
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    streakText: {
+        marginLeft: 6,
+        color: "#ff9800",
+        fontWeight: "bold",
+        fontSize: 14,
+    },
+    frequencyBadge: {
+        backgroundColor: "#ede7f6",
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+    },
+    frequencyText: {
+        color: "#7c4dff",
+        fontWeight: "bold",
+        fontSize: 14,
+    },
+    emptyState: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    emptyStateText: {
+        color: "#666666",
+    },
+    swipeActionLeft: {
+        justifyContent: "center",
+        alignItems: "flex-start",
+        flex: 1,
+        backgroundColor: "#e53935",
+        borderRadius: 18,
+        marginBottom: 18,
+        marginTop: 2,
+        paddingLeft: 16,
+    },
+    swipeActionRight: {
+        justifyContent: "center",
+        alignItems: "flex-end",
+        flex: 1,
+        backgroundColor: "#4caf50",
+        borderRadius: 18,
+        marginBottom: 18,
+        marginTop: 2,
+        paddingRight: 16,
+    },
 });
